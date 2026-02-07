@@ -456,8 +456,9 @@ class MSIFirmwareDumper:
         """Switch from LDROM back to APROM mode"""
         log.info("Switching back to APROM mode...")
         
+        # LDROM uses write/read, not feature reports!
         cmd = [0x00, CMD_GO_APROM] + [0] * 63
-        self.send_command(cmd, "feature_only")
+        self.send_command(cmd, "write_only")
         self.close()
         time.sleep(2)
         
@@ -507,15 +508,17 @@ class MSIFirmwareDumper:
         """Get LDROM version while in bootloader mode"""
         log.info("Reading LDROM version (CMD=0xA6)...")
         
+        # LDROM uses write/read, not feature reports!
         cmd = [0x00, CMD_GET_VERSION] + [0] * 63
-        return self.send_command(cmd, "feature")
+        return self.send_command(cmd, "write")
     
     def read_config(self):
         """Read Config0 and Config1 registers"""
         log.info("Reading config registers (CMD=0xA2)...")
         
+        # LDROM uses write/read, not feature reports!
         cmd = [0x00, CMD_READ_CONFIG] + [0] * 63
-        response = self.send_command(cmd, "feature")
+        response = self.send_command(cmd, "write")
         
         if response and len(response) > 16:
             # Try to parse config at different offsets
@@ -538,11 +541,12 @@ class MSIFirmwareDumper:
         """Synchronize packet number for data transfer"""
         log.info(f"Sync packet number to {packet_num}...")
         
+        # LDROM uses write/read, not feature reports!
         cmd = [0x00, CMD_SYNC_PACKNO, 0x00, 0x00, 0x00]
         cmd.extend([packet_num & 0xFF, (packet_num >> 8) & 0xFF, 0x00, 0x00])
         cmd.extend([0x00] * (65 - len(cmd)))
         
-        response = self.send_command(cmd, "feature")
+        response = self.send_command(cmd, "write")
         return response is not None
 
     # ========================================================================
@@ -566,7 +570,8 @@ class MSIFirmwareDumper:
         ])
         cmd.extend([0x00] * (65 - len(cmd)))
         
-        return self.send_command(cmd, "feature")
+        # LDROM uses write/read, not feature reports!
+        return self.send_command(cmd, "write")
     
     def probe_read_commands(self):
         """Try various commands to find one that reads data"""
@@ -597,7 +602,8 @@ class MSIFirmwareDumper:
             cmd = [0x00, opcode, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x00] + [0] * 52
             
             try:
-                response = self.send_command(cmd, "feature")
+                # LDROM uses write/read, not feature reports!
+                response = self.send_command(cmd, "write")
                 
                 if response:
                     # Check for meaningful data
@@ -653,7 +659,8 @@ class MSIFirmwareDumper:
             cmd.extend([0x00] * (65 - len(cmd)))
             
             try:
-                response = self.send_command(cmd, "feature")
+                # LDROM uses write/read, not feature reports!
+                response = self.send_command(cmd, "write")
                 
                 if response:
                     # Extract data (skip header bytes)
