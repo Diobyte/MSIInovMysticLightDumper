@@ -1,0 +1,13 @@
+{
+  "device_vid": null,
+  "device_pid": null,
+  "device_serial": null,
+  "device_manufacturer": null,
+  "device_product": null,
+  "dump_time": "2026-02-07T13:09:05.107918",
+  "tool_version": "4.0",
+  "file_size": 131120,
+  "md5": "7c4f659bb4a055da6a5445b3344a7965",
+  "sha256": "757a52340ad727b947afdd4a4e2ead0ed8ee310d0275ec1e1a9ac461b66c5527",
+  "sum16": 15940
+}
