@@ -30,6 +30,15 @@ pip install -r requirements.txt
 
 ## Usage
 
+### Easy Method (Windows)
+
+Just double-click one of the launcher scripts - they auto-request admin privileges and install dependencies:
+
+- **`run_bricker.bat`** - Batch file launcher
+- **`run_bricker.ps1`** - PowerShell launcher (with colored output)
+
+### Command Line
+
 **List detected devices:**
 ```bash
 python msi_mystic_light_bricker.py --list
