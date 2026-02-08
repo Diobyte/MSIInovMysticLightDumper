@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-MSI Z890 Mystic Light Controller Bricker
-=========================================
+MSI Mystic Light Controller Bricker
+===================================
 Permanently disables the MSI Mystic Light RGB controller by erasing its firmware.
 
 This removes the unique device serial (7E3424052901 style) for privacy.
@@ -12,15 +12,25 @@ WARNING: This is IRREVERSIBLE! RGB functionality will be permanently lost.
          MSI does not provide standalone firmware to restore the controller.
 
 Requirements: pip install hidapi
+
+Usage:
+  python msi_mystic_light_bricker.py          # Interactive brick mode
+  python msi_mystic_light_bricker.py --list   # List all MSI RGB devices
 """
 
 import hid
 import time
 import sys
+import argparse
 
-# Device identifiers
-APROM_VID = 0x0DB0
-APROM_PID = 0x0076
+# Supported APROM devices (normal mode)
+APROM_DEVICES = [
+    (0x0DB0, 0x0076, "MSI Mystic Light (Nuvoton)"),
+    (0x1462, 0x7C70, "MSI Mystic Light Z890"),
+    (0x1462, 0x7E06, "MSI Mystic Light Z790"),
+]
+
+# Bootloader mode (LDROM)
 LDROM_VID = 0x0416
 LDROM_PID = 0x3F00
 
@@ -28,9 +38,12 @@ LDROM_PID = 0x3F00
 CMD_GOTO_LDROM = 0xA0
 CMD_ERASE_ALL = 0xA3
 
+# Global to track which device we're working with
+current_device = None
+
 def print_banner():
     print("=" * 60)
-    print("MSI Z890 MYSTIC LIGHT CONTROLLER BRICKER")
+    print("MSI MYSTIC LIGHT CONTROLLER BRICKER")
     print("=" * 60)
     print()
     print("This tool will PERMANENTLY DISABLE your RGB controller.")
@@ -43,27 +56,72 @@ def print_banner():
     print("  - Motherboard will otherwise function normally")
     print()
 
+def list_all_devices():
+    """List all detected MSI Mystic Light controllers"""
+    print("[*] Scanning for MSI Mystic Light controllers...")
+    print()
+    
+    found_any = False
+    
+    # Check all known APROM devices
+    for vid, pid, name in APROM_DEVICES:
+        devices = hid.enumerate(vid, pid)
+        for d in devices:
+            found_any = True
+            print(f"[APROM] {name}")
+            print(f"        VID: 0x{vid:04X}  PID: 0x{pid:04X}")
+            print(f"        Manufacturer: {d.get('manufacturer_string', 'N/A')}")
+            print(f"        Product: {d.get('product_string', 'N/A')}")
+            print(f"        Serial: {d.get('serial_number', 'N/A')}")
+            print()
+    
+    # Check LDROM (bootloader)
+    devices = hid.enumerate(LDROM_VID, LDROM_PID)
+    for d in devices:
+        found_any = True
+        print(f"[LDROM] Nuvoton ISP Bootloader")
+        print(f"        VID: 0x{LDROM_VID:04X}  PID: 0x{LDROM_PID:04X}")
+        print(f"        Manufacturer: {d.get('manufacturer_string', 'N/A')}")
+        print(f"        Product: {d.get('product_string', 'N/A')}")
+        print(f"        Serial: {d.get('serial_number', 'N/A')}")
+        print()
+    
+    if not found_any:
+        print("[-] No MSI Mystic Light controllers found.")
+        print()
+        print("    Make sure:")
+        print("    - Your motherboard has an MSI RGB controller")
+        print("    - No other software is using the device")
+        print("    - You have appropriate permissions (try running as admin)")
+    
+    return found_any
+
 def find_device():
     """Find MSI Mystic Light controller"""
+    global current_device
     print("[*] Searching for MSI Mystic Light controller...")
     
-    # Check APROM mode first
-    devices = hid.enumerate(APROM_VID, APROM_PID)
-    if devices:
-        d = devices[0]
-        print(f"[+] Found in APROM mode: VID={APROM_VID:04X} PID={APROM_PID:04X}")
-        print(f"    Manufacturer: {d.get('manufacturer_string', 'N/A')}")
-        print(f"    Product: {d.get('product_string', 'N/A')}")
-        print(f"    Serial: {d.get('serial_number', 'N/A')}")
-        return 'APROM', d['path']
+    # Check all known APROM devices
+    for vid, pid, name in APROM_DEVICES:
+        devices = hid.enumerate(vid, pid)
+        if devices:
+            d = devices[0]
+            print(f"[+] Found: {name}")
+            print(f"    VID=0x{vid:04X} PID=0x{pid:04X}")
+            print(f"    Manufacturer: {d.get('manufacturer_string', 'N/A')}")
+            print(f"    Product: {d.get('product_string', 'N/A')}")
+            print(f"    Serial: {d.get('serial_number', 'N/A')}")
+            current_device = (vid, pid, name)
+            return 'APROM', d['path']
     
     # Check LDROM mode
     devices = hid.enumerate(LDROM_VID, LDROM_PID)
     if devices:
         d = devices[0]
-        print(f"[+] Found in LDROM mode: VID={LDROM_VID:04X} PID={LDROM_PID:04X}")
+        print(f"[+] Found in LDROM mode: VID=0x{LDROM_VID:04X} PID=0x{LDROM_PID:04X}")
         print(f"    Manufacturer: {d.get('manufacturer_string', 'N/A')}")
         print(f"    Product: {d.get('product_string', 'N/A')}")
+        current_device = (LDROM_VID, LDROM_PID, "Nuvoton ISP")
         return 'LDROM', d['path']
     
     print("[-] No MSI Mystic Light controller found!")
@@ -71,11 +129,18 @@ def find_device():
 
 def enter_bootloader():
     """Switch from APROM to LDROM (bootloader) mode"""
+    global current_device
     print("[*] Entering bootloader mode...")
+    
+    if not current_device:
+        print("[-] No device selected")
+        return False
+    
+    vid, pid, name = current_device
     
     try:
         dev = hid.device()
-        dev.open(APROM_VID, APROM_PID)
+        dev.open(vid, pid)
         dev.set_nonblocking(0)
         
         # Send goto LDROM command (write method - works on Z890)
@@ -148,11 +213,16 @@ def verify_brick():
     print("[*] Verifying brick status...")
     time.sleep(2)
     
-    # Check if APROM device is gone
-    aprom_devices = hid.enumerate(APROM_VID, APROM_PID)
+    # Check if any APROM device is still present
+    aprom_found = False
+    for vid, pid, name in APROM_DEVICES:
+        if hid.enumerate(vid, pid):
+            aprom_found = True
+            break
+    
     ldrom_devices = hid.enumerate(LDROM_VID, LDROM_PID)
     
-    if not aprom_devices:
+    if not aprom_found:
         print("[+] APROM device no longer present - SUCCESS!")
         if ldrom_devices:
             d = ldrom_devices[0]
@@ -164,6 +234,28 @@ def verify_brick():
         return False
 
 def main():
+    parser = argparse.ArgumentParser(
+        description='MSI Mystic Light Controller Bricker - Permanently disable RGB controller',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=\"\"\"
+Examples:
+  python msi_mystic_light_bricker.py          # Interactive brick mode
+  python msi_mystic_light_bricker.py --list   # List all MSI RGB devices
+
+Supported devices:
+  - MSI Z890 Mystic Light (VID:0x1462 PID:0x7C70)
+  - MSI Z790 Mystic Light (VID:0x1462 PID:0x7E06)
+  - MSI Mystic Light Nuvoton (VID:0x0DB0 PID:0x0076)
+\"\"\"
+    )
+    parser.add_argument('--list', '-l', action='store_true',
+                        help='List all detected MSI Mystic Light controllers')
+    args = parser.parse_args()
+    
+    if args.list:
+        list_all_devices()
+        return 0
+    
     print_banner()
     
     # Find device
@@ -171,9 +263,11 @@ def main():
     
     if mode is None:
         print("\nNo device found. Make sure:")
-        print("  1. MSI Mystic Light controller is present (Z890 motherboard)")
-        print("  2. No other software is using the device")
-        print("  3. You have appropriate permissions")
+        print("  1. MSI Mystic Light controller is present")
+        print("  2. No other software is using the device (close MSI Center)")
+        print("  3. You have appropriate permissions (try running as Administrator)")
+        print()
+        print("Run with --list to see all detected devices.")
         return 1
     
     # Confirm with user
